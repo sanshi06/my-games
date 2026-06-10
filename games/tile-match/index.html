@@ -169,11 +169,8 @@
   .modal p { color:#aaa; margin-bottom:18px; line-height:1.6; }
   .modal .btn { font-size:1rem; padding:12px 36px; }
 
-  /* 响应式 */
+  /* 响应式：留出空间让 JS 动态计算 */
   @media (max-width:480px) {
-    :root { --tile-w:44px; --tile-h:54px; }
-    .tile { font-size:1.4rem; border-radius:6px; }
-    .slot { font-size:1.4rem; border-radius:6px; }
     .header .title { font-size:1.2rem; }
   }
 </style>
@@ -350,6 +347,49 @@ function updateBlocked() {
 // ============================================================
 //  渲染
 // ============================================================
+function getBoardSize(tw, th, gp) {
+  let maxW = 0, maxH = 0;
+  const layers = getLayers();
+  for (const L of layers) {
+    const w = L.ox + L.cols * (tw + gp) - gp;
+    const h = L.oy + L.rows * (th + gp) - gp;
+    maxW = Math.max(maxW, w);
+    maxH = Math.max(maxH, h);
+  }
+  return { w: maxW, h: maxH };
+}
+
+function fitToScreen() {
+  const availW = window.innerWidth - 16; // 左右各 8px 边距
+  const root = document.documentElement;
+  let tw = parseInt(getComputedStyle(root).getPropertyValue('--tile-w'));
+  let th = parseInt(getComputedStyle(root).getPropertyValue('--tile-h'));
+  let gp = parseInt(getComputedStyle(root).getPropertyValue('--gap'));
+
+  // 计算当前棋盘宽度
+  let { w } = getBoardSize(tw, th, gp);
+
+  if (w <= availW) return; // 已适配
+
+  // 按比例缩小牌尺寸
+  const ratio = availW / w;
+  const newTW = Math.floor(tw * ratio);
+  const newTH = Math.floor(th * ratio);
+  const newGap = Math.max(2, Math.floor(gp * ratio));
+
+  root.style.setProperty('--tile-w', newTW + 'px');
+  root.style.setProperty('--tile-h', newTH + 'px');
+  root.style.setProperty('--gap', newGap + 'px');
+
+  // 重新计算位置
+  const layersNew = getLayers();
+  for (const tile of tiles) {
+    const L = layersNew[tile.layer];
+    tile.x = L.ox + tile.col * (newTW + newGap);
+    tile.y = L.oy + tile.row * (newTH + newGap);
+  }
+}
+
 function getTileW() {
   return parseInt(getComputedStyle(document.documentElement).getPropertyValue('--tile-w'));
 }
@@ -360,38 +400,10 @@ function getGap() {
   return parseInt(getComputedStyle(document.documentElement).getPropertyValue('--gap'));
 }
 
-function getBoardSize() {
-  let maxW = 0, maxH = 0;
-  const TILE_W = getTileW();
-  const TILE_H = getTileH();
-  const GAP = getGap();
-  for (const L of getLayers()) {
-    const w = L.ox + L.cols * (TILE_W + GAP) - GAP;
-    const h = L.oy + L.rows * (TILE_H + GAP) - GAP;
-    maxW = Math.max(maxW, w);
-    maxH = Math.max(maxH, h);
-  }
-  return { w: maxW, h: maxH };
-}
-
-function applyScale() {
-  const wrap = document.querySelector('.board-wrap');
-  const board = document.getElementById('board');
-  if (!wrap || !board) return;
-  const bw = parseFloat(board.style.width) || board.offsetWidth;
-  const availW = wrap.parentElement.clientWidth - 10; // 留点边距
-  const scale = Math.min(1, availW / bw);
-  wrap.style.transform = `scale(${scale})`;
-  wrap.style.transformOrigin = 'top center';
-  // 缩放后调整容器高度
-  const bh = parseFloat(board.style.height) || board.offsetHeight;
-  wrap.style.height = (bh * scale) + 'px';
-  wrap.style.marginBottom = (-bh * (1 - scale)) + 'px';
-}
-
 function renderBoard() {
+  fitToScreen();
   const board = document.getElementById('board');
-  const { w, h } = getBoardSize();
+  const { w, h } = getBoardSize(getTileW(), getTileH(), getGap());
   board.style.width  = w + 'px';
   board.style.height = h + 'px';
   board.innerHTML = '';
@@ -420,7 +432,6 @@ function renderBoard() {
 
   renderSlots();
   updateHUD();
-  applyScale();
 }
 
 function renderSlots() {
@@ -689,16 +700,8 @@ document.addEventListener('keydown', e => {
 //  窗口大小变化
 // ============================================================
 window.addEventListener('resize', () => {
-  // 重新计算所有牌的位置
-  const layersNew = getLayers();
-  for (const tile of tiles) {
-    const L = layersNew[tile.layer];
-    tile.x = L.ox + tile.col * (getTileW() + getGap());
-    tile.y = L.oy + tile.row * (getTileH() + getGap());
-  }
   updateBlocked();
   renderBoard();
-  applyScale();
 });
 
 // ============================================================
