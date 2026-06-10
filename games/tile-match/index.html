@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>🎴 叠叠消 — 三层消除小游戏</title>
+<style>
+  :root {
+    --bg: #1a1a2e;
+    --board-bg: #16213e;
+    --slot-bg: #0f3460;
+    --accent: #e94560;
+    --gold: #f0c040;
+    --text: #eee;
+    --tile-w: 54px;
+    --tile-h: 66px;
+    --gap: 4px;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    background: var(--bg);
+    font-family: -apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+    display:flex; flex-direction:column; align-items:center;
+    min-height:100vh; user-select:none; -webkit-user-select:none;
+    overflow-x:hidden; color:var(--text);
+  }
+
+  /* 顶部信息栏 */
+  .header {
+    width:100%; max-width:520px; padding:14px 20px;
+    display:flex; justify-content:space-between; align-items:center;
+  }
+  .header .title { font-size:1.5rem; font-weight:800; letter-spacing:0.04em; }
+  .header .title span { color:var(--accent); }
+  .stats { display:flex; gap:18px; font-size:0.85rem; color:#aaa; }
+  .stats b { color:var(--gold); }
+
+  /* 游戏板 */
+  .board-wrap {
+    position:relative; width:100%; max-width:520px;
+    display:flex; justify-content:center;
+    margin:0 auto; padding:10px;
+  }
+  .board {
+    position:relative;
+    /* 尺寸由 JS 动态设置 */;
+  }
+
+  /* 单个牌 */
+  .tile {
+    position:absolute;
+    width:var(--tile-w); height:var(--tile-h);
+    border-radius:8px; cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+    font-size:1.7rem;
+    background:linear-gradient(145deg, #fffef5, #f0e8d0);
+    border:2px solid #d4c5a0;
+    box-shadow: 0 3px 8px rgba(0,0,0,0.35);
+    transition: transform 0.12s, box-shadow 0.12s, opacity 0.25s;
+    z-index:1;
+  }
+  .tile:hover { transform:translateY(-2px); box-shadow:0 6px 16px rgba(0,0,0,0.45); }
+  .tile:active { transform:scale(0.95); }
+  /* 被遮挡 */
+  .tile.blocked {
+    filter:brightness(0.55) saturate(0.3);
+    cursor:not-allowed;
+    pointer-events:none;
+  }
+  /* 不同层的色调 */
+  .tile.l0 { background:linear-gradient(145deg, #fffef8, #ece0c8); border-color:#c8b888; }
+  .tile.l1 { background:linear-gradient(145deg, #fffff0, #f5e8d0); border-color:#d0c090; }
+  .tile.l2 { background:linear-gradient(145deg, #ffffff, #faf0dc); border-color:#d8c898; }
+
+  .tile.selected {
+    animation: tilePop 0.25s ease-out;
+    opacity:0; pointer-events:none;
+  }
+  @keyframes tilePop {
+    0% { transform:scale(1); opacity:1; }
+    40% { transform:scale(1.15); opacity:1; }
+    100% { transform:scale(0.3); opacity:0; }
+  }
+
+  /* 槽位栏 */
+  .slot-bar {
+    width:100%; max-width:520px; margin:16px auto;
+    display:flex; justify-content:center; gap:6px;
+    padding:10px 12px; background:var(--slot-bg);
+    border-radius:14px; border:2px solid rgba(255,255,255,0.1);
+    min-height:74px; align-items:center;
+    position:relative;
+  }
+  .slot-bar.danger {
+    border-color:var(--accent);
+    animation: dangerPulse 0.5s ease-in-out 3;
+  }
+  @keyframes dangerPulse {
+    0%,100% { border-color:rgba(233,68,96,0.3); }
+    50% { border-color:var(--accent); }
+  }
+
+  .slot {
+    width:var(--tile-w); height:var(--tile-h);
+    border-radius:8px; border:2px dashed rgba(255,255,255,0.15);
+    display:flex; align-items:center; justify-content:center;
+    font-size:1.7rem; background:rgba(255,255,255,0.03);
+    transition:all 0.2s;
+  }
+  .slot.filled {
+    border-style:solid;
+    border-color:#c8b888;
+    background:linear-gradient(145deg, #fffef5, #f0e8d0);
+    animation: slotIn 0.25s cubic-bezier(.34,1.56,.64,1);
+  }
+  @keyframes slotIn {
+    0% { transform:translateY(-40px) scale(0.5); opacity:0; }
+    100% { transform:translateY(0) scale(1); opacity:1; }
+  }
+  .slot.matched {
+    animation: slotMatch 0.4s ease-out forwards;
+  }
+  @keyframes slotMatch {
+    0% { transform:scale(1); opacity:1; }
+    50% { transform:scale(1.3); opacity:0.8; background:var(--gold); }
+    100% { transform:scale(0); opacity:0; }
+  }
+
+  /* 消除粒子 */
+  .particle {
+    position:fixed; pointer-events:none; z-index:100;
+    font-size:1.4rem; animation: particleFly 0.7s ease-out forwards;
+  }
+  @keyframes particleFly {
+    0% { transform:translate(0,0) scale(1); opacity:1; }
+    100% { transform:translate(var(--dx), var(--dy)) scale(0.2); opacity:0; }
+  }
+
+  /* 按钮 */
+  .btn-row { display:flex; gap:12px; margin:8px 0 20px; }
+  .btn {
+    padding:10px 26px; border-radius:25px; border:none;
+    font-size:0.95rem; font-weight:700; cursor:pointer;
+    letter-spacing:0.03em; transition:all 0.2s;
+    color:#fff;
+  }
+  .btn-restart { background:var(--accent); }
+  .btn-restart:hover { background:#ff5a7a; transform:translateY(-1px); }
+  .btn-undo { background:#555; }
+  .btn-undo:hover { background:#777; }
+  .btn-hint { background:#3b82f6; }
+  .btn-hint:hover { background:#60a5fa; }
+
+  /* 弹窗 */
+  .overlay {
+    position:fixed; inset:0; z-index:200;
+    background:rgba(0,0,0,0.7);
+    display:flex; align-items:center; justify-content:center;
+    animation: fadeIn 0.3s;
+  }
+  @keyframes fadeIn { from{opacity:0} to{opacity:1} }
+  .modal {
+    background:#1e2a3a; border-radius:20px; padding:32px 40px;
+    text-align:center; border:1px solid rgba(255,255,255,0.1);
+    max-width:360px;
+  }
+  .modal h2 { font-size:1.6rem; margin-bottom:10px; }
+  .modal .emoji { font-size:4rem; display:block; margin-bottom:8px; }
+  .modal p { color:#aaa; margin-bottom:18px; line-height:1.6; }
+  .modal .btn { font-size:1rem; padding:12px 36px; }
+
+  /* 响应式 */
+  @media (max-width:480px) {
+    :root { --tile-w:44px; --tile-h:54px; }
+    .tile { font-size:1.4rem; border-radius:6px; }
+    .slot { font-size:1.4rem; border-radius:6px; }
+    .header .title { font-size:1.2rem; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="title">🎴 叠叠<span>消</span></div>
+  <div class="stats">
+    <span>剩余 <b id="remain">0</b></span>
+    <span>已消 <b id="cleared">0</b></span>
+    <span>得分 <b id="score">0</b></span>
+  </div>
+</div>
+
+<div class="board-wrap">
+  <div class="board" id="board"></div>
+</div>
+
+<div class="slot-bar" id="slotBar">
+  <!-- JS 填充 7 个槽位 -->
+</div>
+
+<div class="btn-row">
+  <button class="btn btn-undo" id="btnUndo">↩ 撤销</button>
+  <button class="btn btn-hint" id="btnHint">💡 提示</button>
+  <button class="btn btn-restart" id="btnRestart">🔄 重新开始</button>
+</div>
+
+<!-- 弹窗容器 -->
+<div id="overlayContainer"></div>
+
+<script>
+// ============================================================
+//  叠叠消 — 三层消除游戏
+// ============================================================
+
+const ICONS = ['🐑','🐮','🐷','🐔','🐶','🐱','🐰','🐸','🦊','🐼','🐨','🦁','🐯','🐵'];
+const MAX_SLOTS = 7;
+const MATCH_COUNT = 3;
+
+// 层定义: ox/oy 是相对于层0左上角的"半格"偏移量（随牌尺寸自动缩放）
+const LAYERS_CFG = [
+  { cols:9, rows:7, oxHalf:0.5,  oyHalf:0.5  },   // 层0: 63 格
+  { cols:7, rows:5, oxHalf:1.8,  oyHalf:1.4  },    // 层1: 35 格
+  { cols:5, rows:3, oxHalf:3.2,  oyHalf:2.7  },    // 层2: 15 格
+];
+
+function getLayers() {
+  const TW = getTileW(), TH = getTileH(), G = getGap();
+  return LAYERS_CFG.map(cfg => ({
+    cols: cfg.cols, rows: cfg.rows,
+    ox: Math.round((TW + G) * cfg.oxHalf),
+    oy: Math.round((TH + G) * cfg.oyHalf),
+  }));
+}
+
+// ============================================================
+//  游戏状态
+// ============================================================
+let tiles = [];           // { id, icon, layer, col, row, x, y, alive, blocked }
+let slots = [];           // 槽内牌 id 列表
+let score = 0;
+let clearedCount = 0;
+let totalCount = 0;
+let history = [];         // 撤销历史 [{tileId, slotIdx}]
+let hintTimer = null;
+
+// ============================================================
+//  生成牌数据
+// ============================================================
+function generateTiles() {
+  tiles = [];
+  // 计算总牌数
+  let totalSlots = 0;
+  for (const L of getLayers()) totalSlots += L.cols * L.rows;
+
+  // 确保 totalSlots 是 MATCH_COUNT 的倍数
+  const remainder = totalSlots % MATCH_COUNT;
+  if (remainder !== 0) totalSlots -= remainder;
+
+  // 分配图标类型数量: 每种图标出现 MATCH_COUNT 的倍数
+  const numTypes = ICONS.length;
+  const groupsNeeded = totalSlots / MATCH_COUNT;       // 需要的"三连组"数量
+  const perType = Math.floor(groupsNeeded / numTypes);  // 每种图标的组数
+  let extra = groupsNeeded % numTypes;                  // 多余的组
+
+  const iconPool = [];
+  for (let i = 0; i < numTypes; i++) {
+    const groups = perType + (extra > 0 ? 1 : 0);
+    if (extra > 0) extra--;
+    for (let g = 0; g < groups; g++) {
+      for (let m = 0; m < MATCH_COUNT; m++) {
+        iconPool.push(ICONS[i]);
+      }
+    }
+  }
+
+  // 洗牌
+  shuffle(iconPool);
+
+  // 分配牌到各层
+  let poolIdx = 0;
+  let id = 0;
+  const TILE_W = getTileW();
+  const TILE_H = getTileH();
+  const GAP = getGap();
+
+  const layersDef = getLayers();
+    for (let l = 0; l < layersDef.length; l++) {
+    const L = layersDef[l];
+    for (let r = 0; r < L.rows; r++) {
+      for (let c = 0; c < L.cols; c++) {
+        if (poolIdx >= iconPool.length) break;
+        tiles.push({
+          id: id++,
+          icon: iconPool[poolIdx++],
+          layer: l, col: c, row: r,
+          x: L.ox + c * (TILE_W + GAP),
+          y: L.oy + r * (TILE_H + GAP),
+          alive: true,
+        });
+      }
+    }
+  }
+
+  totalCount = tiles.length;
+  clearedCount = 0;
+  score = 0;
+  slots = [];
+  history = [];
+  updateBlocked();
+  updateHUD();
+}
+
+function shuffle(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+}
+
+// ============================================================
+//  遮挡判定
+// ============================================================
+function updateBlocked() {
+  const TILE_W = getTileW();
+  const TILE_H = getTileH();
+
+  for (const tile of tiles) {
+    if (!tile.alive) { tile.blocked = true; continue; }
+    tile.blocked = false;
+    // 检查是否有更高层的牌覆盖此牌
+    const overlapThreshold = 0.35; // 覆盖超过 35% 即阻塞
+    for (const other of tiles) {
+      if (!other.alive || other.layer <= tile.layer || other.id === tile.id) continue;
+      // 计算重叠面积
+      const ox = Math.max(0, Math.min(
+        tile.x + TILE_W, other.x + TILE_W
+      ) - Math.max(tile.x, other.x));
+      const oy = Math.max(0, Math.min(
+        tile.y + TILE_H, other.y + TILE_H
+      ) - Math.max(tile.y, other.y));
+      const overlap = ox * oy;
+      const tileArea = TILE_W * TILE_H;
+      if (overlap / tileArea > overlapThreshold) {
+        tile.blocked = true;
+        break;
+      }
+    }
+  }
+}
+
+// ============================================================
+//  渲染
+// ============================================================
+function getTileW() {
+  return parseInt(getComputedStyle(document.documentElement).getPropertyValue('--tile-w'));
+}
+function getTileH() {
+  return parseInt(getComputedStyle(document.documentElement).getPropertyValue('--tile-h'));
+}
+function getGap() {
+  return parseInt(getComputedStyle(document.documentElement).getPropertyValue('--gap'));
+}
+
+function getBoardSize() {
+  let maxW = 0, maxH = 0;
+  const TILE_W = getTileW();
+  const TILE_H = getTileH();
+  const GAP = getGap();
+  for (const L of getLayers()) {
+    const w = L.ox + L.cols * (TILE_W + GAP) - GAP;
+    const h = L.oy + L.rows * (TILE_H + GAP) - GAP;
+    maxW = Math.max(maxW, w);
+    maxH = Math.max(maxH, h);
+  }
+  return { w: maxW, h: maxH };
+}
+
+function renderBoard() {
+  const board = document.getElementById('board');
+  const { w, h } = getBoardSize();
+  board.style.width  = w + 'px';
+  board.style.height = h + 'px';
+  board.innerHTML = '';
+
+  // 从底层到顶层排序绘制
+  const sorted = [...tiles].sort((a, b) => {
+    if (a.layer !== b.layer) return a.layer - b.layer;
+    if (a.row !== b.row) return a.row - b.row;
+    return a.col - b.col;
+  });
+
+  for (const tile of sorted) {
+    if (!tile.alive) continue;
+    const el = document.createElement('div');
+    el.className = `tile l${tile.layer}${tile.blocked ? ' blocked' : ''}`;
+    el.id = 't' + tile.id;
+    el.style.left = tile.x + 'px';
+    el.style.top  = tile.y + 'px';
+    el.style.zIndex = tile.layer * 100 + tile.row * 10 + tile.col;
+    el.textContent = tile.icon;
+    if (!tile.blocked) {
+      el.addEventListener('click', () => onTileClick(tile));
+    }
+    board.appendChild(el);
+  }
+
+  renderSlots();
+  updateHUD();
+}
+
+function renderSlots() {
+  const bar = document.getElementById('slotBar');
+  const slotHTML = [];
+  for (let i = 0; i < MAX_SLOTS; i++) {
+    if (i < slots.length) {
+      const t = tiles.find(t => t.id === slots[i]);
+      slotHTML.push(`<div class="slot filled">${t ? t.icon : '?'}</div>`);
+    } else {
+      slotHTML.push(`<div class="slot"></div>`);
+    }
+  }
+  bar.innerHTML = slotHTML.join('');
+  // 危险警告
+  bar.classList.toggle('danger', slots.length >= MAX_SLOTS - 1);
+}
+
+function updateHUD() {
+  const alive = tiles.filter(t => t.alive).length;
+  document.getElementById('remain').textContent = alive;
+  document.getElementById('cleared').textContent = clearedCount;
+  document.getElementById('score').textContent = score;
+}
+
+// ============================================================
+//  交互逻辑
+// ============================================================
+function onTileClick(tile) {
+  if (tile.blocked || !tile.alive) return;
+  if (slots.length >= MAX_SLOTS) return;
+
+  // 消除之前的提示
+  clearHint();
+
+  const tileEl = document.getElementById('t' + tile.id);
+  if (!tileEl) return;
+
+  // 飞入动画
+  const board = document.getElementById('board');
+  const boardRect = board.getBoundingClientRect();
+  const fromX  = boardRect.left + tile.x + getTileW() / 2;
+  const fromY  = boardRect.top  + tile.y + getTileH() / 2;
+
+  // 移动到槽位
+  const slotIdx = slots.length;
+  slots.push(tile.id);
+  history.push({ tileId: tile.id, slotIdx });
+  tile.alive = false;
+
+  // 更新遮挡
+  updateBlocked();
+  renderBoard();
+
+  // 检查三消
+  checkMatch();
+}
+
+function checkMatch() {
+  // 统计槽中各图标数量
+  const iconCount = {};
+  for (const tid of slots) {
+    const t = tiles.find(t => t.id === tid);
+    if (!t) continue;
+    iconCount[t.icon] = (iconCount[t.icon] || 0) + 1;
+  }
+
+  // 找到可以消除的图标
+  for (const [icon, count] of Object.entries(iconCount)) {
+    if (count >= MATCH_COUNT) {
+      // 消除
+      let removed = 0;
+      slots = slots.filter(tid => {
+        const t = tiles.find(t => t.id === tid);
+        if (t && t.icon === icon && removed < MATCH_COUNT) {
+          removed++;
+          return false;
+        }
+        return true;
+      });
+
+      // 粒子效果
+      spawnParticles(icon);
+
+      score += 100;
+      clearedCount += MATCH_COUNT;
+
+      // 清理历史（消除后不可撤销）
+      history = [];
+
+      renderBoard();
+
+      // 递归检查是否还有可消除的
+      setTimeout(() => checkMatch(), 300);
+      return;
+    }
+  }
+
+  // 检查失败
+  if (slots.length >= MAX_SLOTS) {
+    setTimeout(() => showGameOver(), 400);
+    return;
+  }
+
+  // 检查胜利
+  const alive = tiles.filter(t => t.alive).length;
+  if (alive === 0 && slots.length === 0) {
+    setTimeout(() => showVictory(), 500);
+  }
+}
+
+function spawnParticles(icon) {
+  const bar = document.getElementById('slotBar');
+  const barRect = bar.getBoundingClientRect();
+  const cx = barRect.left + barRect.width / 2;
+  const cy = barRect.top + barRect.height / 2;
+
+  for (let i = 0; i < 8; i++) {
+    const p = document.createElement('div');
+    p.className = 'particle';
+    p.textContent = icon;
+    p.style.left = cx + 'px';
+    p.style.top  = cy + 'px';
+    const angle = (Math.PI * 2 * i) / 8 + Math.random() * 0.5;
+    const dist  = 40 + Math.random() * 50;
+    p.style.setProperty('--dx', Math.cos(angle) * dist + 'px');
+    p.style.setProperty('--dy', Math.sin(angle) * dist - 20 + 'px');
+    document.body.appendChild(p);
+    setTimeout(() => p.remove(), 700);
+  }
+}
+
+// ============================================================
+//  撤销
+// ============================================================
+function undo() {
+  if (history.length === 0) return;
+  clearHint();
+  const last = history.pop();
+  const tile = tiles.find(t => t.id === last.tileId);
+  if (!tile) return;
+
+  tile.alive = true;
+  slots = slots.filter((_, i) => i !== last.slotIdx);
+  updateBlocked();
+  renderBoard();
+}
+
+// ============================================================
+//  提示
+// ============================================================
+function showHint() {
+  clearHint();
+  // 找一对可点击的相同图标牌
+  const clickable = tiles.filter(t => t.alive && !t.blocked);
+  const iconMap = {};
+  for (const t of clickable) {
+    if (!iconMap[t.icon]) iconMap[t.icon] = [];
+    iconMap[t.icon].push(t);
+  }
+  // 找已出现在槽中的图标
+  const slotIcons = {};
+  for (const tid of slots) {
+    const t = tiles.find(t => t.id === tid);
+    if (t) slotIcons[t.icon] = (slotIcons[t.icon] || 0) + 1;
+  }
+
+  // 优先提示槽中已有 2 个的图标
+  for (const [icon, count] of Object.entries(slotIcons)) {
+    if (count === MATCH_COUNT - 1 && iconMap[icon] && iconMap[icon].length > 0) {
+      highlightTile(iconMap[icon][0]);
+      return;
+    }
+  }
+
+  // 否则提示任意可点牌
+  for (const [icon, arr] of Object.entries(iconMap)) {
+    if (arr.length >= MATCH_COUNT || (slotIcons[icon] || 0) > 0) {
+      highlightTile(arr[0]);
+      return;
+    }
+  }
+
+  // 随机
+  if (clickable.length > 0) highlightTile(clickable[0]);
+}
+
+function highlightTile(tile) {
+  const el = document.getElementById('t' + tile.id);
+  if (!el) return;
+  el.style.boxShadow = '0 0 20px 6px #f0c040, 0 0 40px 12px rgba(240,192,64,0.5)';
+  el.style.borderColor = '#f0c040';
+  el.style.transform = 'translateY(-3px)';
+  hintTimer = setTimeout(() => {
+    el.style.boxShadow = '';
+    el.style.borderColor = '';
+    el.style.transform = '';
+  }, 1500);
+}
+
+function clearHint() {
+  if (hintTimer) { clearTimeout(hintTimer); hintTimer = null; }
+  // 清除所有高亮
+  document.querySelectorAll('.tile').forEach(el => {
+    el.style.boxShadow = '';
+    el.style.borderColor = '';
+    el.style.transform = '';
+  });
+}
+
+// ============================================================
+//  弹窗
+// ============================================================
+function showOverlay(emoji, title, msg, btnText, btnAction) {
+  const container = document.getElementById('overlayContainer');
+  container.innerHTML = `
+    <div class="overlay" id="overlay">
+      <div class="modal">
+        <span class="emoji">${emoji}</span>
+        <h2>${title}</h2>
+        <p>${msg}</p>
+        <button class="btn btn-restart" id="modalBtn">${btnText}</button>
+      </div>
+    </div>`;
+  document.getElementById('modalBtn').addEventListener('click', () => {
+    container.innerHTML = '';
+    if (btnAction) btnAction();
+  });
+}
+
+function showVictory() {
+  showOverlay('🏆', '恭喜通关！',
+    `消除了 ${clearedCount} 张牌，得分 ${score}`,
+    '再来一局', restart);
+}
+
+function showGameOver() {
+  const alive = tiles.filter(t => t.alive).length;
+  showOverlay('😵', '槽位已满！',
+    `还剩 ${alive} 张牌未消除，得分 ${score}`,
+    '重新挑战', restart);
+}
+
+function restart() {
+  clearHint();
+  document.getElementById('overlayContainer').innerHTML = '';
+  generateTiles();
+  renderBoard();
+}
+
+// ============================================================
+//  按钮事件
+// ============================================================
+document.getElementById('btnRestart').addEventListener('click', restart);
+document.getElementById('btnUndo').addEventListener('click', undo);
+document.getElementById('btnHint').addEventListener('click', showHint);
+
+// 键盘快捷键
+document.addEventListener('keydown', e => {
+  if (e.key === 'z' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); undo(); }
+  if (e.key === 'h') showHint();
+  if (e.key === 'r' && !e.ctrlKey && !e.metaKey) restart();
+});
+
+// ============================================================
+//  窗口大小变化
+// ============================================================
+window.addEventListener('resize', () => {
+  // 重新计算所有牌的位置
+  const layersNew = getLayers();
+  for (const tile of tiles) {
+    const L = layersNew[tile.layer];
+    tile.x = L.ox + tile.col * (getTileW() + getGap());
+    tile.y = L.oy + tile.row * (getTileH() + getGap());
+  }
+  updateBlocked();
+  renderBoard();
+});
+
+// ============================================================
+//  启动
+// ============================================================
+function init() {
+  // 创建槽位
+  const bar = document.getElementById('slotBar');
+  bar.innerHTML = Array.from({ length: MAX_SLOTS }, () => '<div class="slot"></div>').join('');
+  generateTiles();
+  renderBoard();
+}
+
+init();
+console.log('🎴 叠叠消 — 准备就绪！');
+console.log('  点击未遮挡的牌 → 移入槽位 → 三张相同自动消除');
+console.log('  槽满 7 张未消 → 游戏结束');
+console.log('  快捷键: R=重来  H=提示  Ctrl+Z=撤销');
+</script>
+</body>
+</html>
