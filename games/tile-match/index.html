@@ -374,6 +374,21 @@ function getBoardSize() {
   return { w: maxW, h: maxH };
 }
 
+function applyScale() {
+  const wrap = document.querySelector('.board-wrap');
+  const board = document.getElementById('board');
+  if (!wrap || !board) return;
+  const bw = parseFloat(board.style.width) || board.offsetWidth;
+  const availW = wrap.parentElement.clientWidth - 10; // 留点边距
+  const scale = Math.min(1, availW / bw);
+  wrap.style.transform = `scale(${scale})`;
+  wrap.style.transformOrigin = 'top center';
+  // 缩放后调整容器高度
+  const bh = parseFloat(board.style.height) || board.offsetHeight;
+  wrap.style.height = (bh * scale) + 'px';
+  wrap.style.marginBottom = (-bh * (1 - scale)) + 'px';
+}
+
 function renderBoard() {
   const board = document.getElementById('board');
   const { w, h } = getBoardSize();
@@ -405,6 +420,7 @@ function renderBoard() {
 
   renderSlots();
   updateHUD();
+  applyScale();
 }
 
 function renderSlots() {
@@ -682,6 +698,7 @@ window.addEventListener('resize', () => {
   }
   updateBlocked();
   renderBoard();
+  applyScale();
 });
 
 // ============================================================
