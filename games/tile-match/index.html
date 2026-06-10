@@ -347,63 +347,52 @@ function updateBlocked() {
 // ============================================================
 //  渲染
 // ============================================================
-function getBoardSize(tw, th, gp) {
-  let maxW = 0, maxH = 0;
+// 根据视口宽度计算最佳牌尺寸，写入 CSS 变量
+function computeTileSize() {
+  const availW = window.innerWidth - 12;
+  const aspect = 66 / 54;
+  let tw = 54, th = 66, gp = 4;
+
+  while (tw > 18) {
+    const layers = getLayersFor(tw, th, gp);
+    let maxW = 0;
+    for (const L of layers) maxW = Math.max(maxW, L.ox + L.cols * (tw + gp) - gp);
+    if (maxW <= availW) break;
+    tw -= 2; th = Math.round(tw * aspect); gp = Math.max(2, Math.round(tw / 15));
+  }
+  const r = document.documentElement;
+  r.style.setProperty('--tile-w', tw + 'px');
+  r.style.setProperty('--tile-h', th + 'px');
+  r.style.setProperty('--gap',  gp + 'px');
+}
+
+function getLayersFor(tw, th, gp) {
+  return LAYERS_CFG.map(cfg => ({
+    cols: cfg.cols, rows: cfg.rows,
+    ox: Math.round((tw + gp) * cfg.oxHalf),
+    oy: Math.round((th + gp) * cfg.oyHalf),
+  }));
+}
+
+function getBoardSize() {
+  const tw = getTileW(), th = getTileH(), gp = getGap();
   const layers = getLayers();
+  let maxW = 0, maxH = 0;
   for (const L of layers) {
-    const w = L.ox + L.cols * (tw + gp) - gp;
-    const h = L.oy + L.rows * (th + gp) - gp;
-    maxW = Math.max(maxW, w);
-    maxH = Math.max(maxH, h);
+    maxW = Math.max(maxW, L.ox + L.cols * (tw + gp) - gp);
+    maxH = Math.max(maxH, L.oy + L.rows * (th + gp) - gp);
   }
   return { w: maxW, h: maxH };
 }
 
-function fitToScreen() {
-  const availW = window.innerWidth - 16; // 左右各 8px 边距
-  const root = document.documentElement;
-  let tw = parseInt(getComputedStyle(root).getPropertyValue('--tile-w'));
-  let th = parseInt(getComputedStyle(root).getPropertyValue('--tile-h'));
-  let gp = parseInt(getComputedStyle(root).getPropertyValue('--gap'));
-
-  // 计算当前棋盘宽度
-  let { w } = getBoardSize(tw, th, gp);
-
-  if (w <= availW) return; // 已适配
-
-  // 按比例缩小牌尺寸
-  const ratio = availW / w;
-  const newTW = Math.floor(tw * ratio);
-  const newTH = Math.floor(th * ratio);
-  const newGap = Math.max(2, Math.floor(gp * ratio));
-
-  root.style.setProperty('--tile-w', newTW + 'px');
-  root.style.setProperty('--tile-h', newTH + 'px');
-  root.style.setProperty('--gap', newGap + 'px');
-
-  // 重新计算位置
-  const layersNew = getLayers();
-  for (const tile of tiles) {
-    const L = layersNew[tile.layer];
-    tile.x = L.ox + tile.col * (newTW + newGap);
-    tile.y = L.oy + tile.row * (newTH + newGap);
-  }
-}
-
-function getTileW() {
-  return parseInt(getComputedStyle(document.documentElement).getPropertyValue('--tile-w'));
-}
-function getTileH() {
-  return parseInt(getComputedStyle(document.documentElement).getPropertyValue('--tile-h'));
-}
-function getGap() {
-  return parseInt(getComputedStyle(document.documentElement).getPropertyValue('--gap'));
-}
+function getTileW() { return parseInt(getComputedStyle(document.documentElement).getPropertyValue('--tile-w')); }
+function getTileH() { return parseInt(getComputedStyle(document.documentElement).getPropertyValue('--tile-h')); }
+function getGap()  { return parseInt(getComputedStyle(document.documentElement).getPropertyValue('--gap')); }
 
 function renderBoard() {
-  fitToScreen();
   const board = document.getElementById('board');
-  const { w, h } = getBoardSize(getTileW(), getTileH(), getGap());
+  const tw = getTileW(), th = getTileH(), gp = getGap();
+  const { w, h } = getBoardSize();
   board.style.width  = w + 'px';
   board.style.height = h + 'px';
   board.innerHTML = '';
@@ -678,6 +667,7 @@ function showGameOver() {
 function restart() {
   clearHint();
   document.getElementById('overlayContainer').innerHTML = '';
+  computeTileSize();
   generateTiles();
   renderBoard();
 }
@@ -700,6 +690,14 @@ document.addEventListener('keydown', e => {
 //  窗口大小变化
 // ============================================================
 window.addEventListener('resize', () => {
+  computeTileSize();
+  // 重新计算牌位置
+  const layersNew = getLayers();
+  for (const tile of tiles) {
+    const L = layersNew[tile.layer];
+    tile.x = L.ox + tile.col * (getTileW() + getGap());
+    tile.y = L.oy + tile.row * (getTileH() + getGap());
+  }
   updateBlocked();
   renderBoard();
 });
@@ -708,9 +706,9 @@ window.addEventListener('resize', () => {
 //  启动
 // ============================================================
 function init() {
-  // 创建槽位
   const bar = document.getElementById('slotBar');
   bar.innerHTML = Array.from({ length: MAX_SLOTS }, () => '<div class="slot"></div>').join('');
+  computeTileSize();
   generateTiles();
   renderBoard();
 }
