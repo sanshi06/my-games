@@ -2,6 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>🎴 叠叠消 — 三层消除小游戏</title>
 <style>
@@ -814,26 +815,25 @@ window.addEventListener('resize', () => {
 //  启动
 // ============================================================
 function init() {
-  const bar = document.getElementById('slotBar');
-  bar.innerHTML = Array.from({ length: MAX_SLOTS }, () => '<div class="slot"></div>').join('');
-  computeTileSize();
-  generateTiles();
-  renderBoard();
-
-  // 开始按钮 — 解锁音频 + 进入游戏
+  // 开始按钮 — 最先绑定，确保点击可用
   document.getElementById('startBtn').addEventListener('click', function() {
     ensureAudio();
-    if (audioCtx.state === 'suspended') audioCtx.resume();
+    if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
     BGM.start();
     var b = document.getElementById('btnBGM');
     if (b) { b.style.background = '#10b981'; b.textContent = '🎵 ON'; }
-    // 隐藏开始界面
     var screen = document.getElementById('startScreen');
     screen.style.transition = 'opacity 0.4s, transform 0.4s';
     screen.style.opacity = '0';
     screen.style.transform = 'scale(1.05)';
     setTimeout(function() { screen.remove(); }, 400);
   });
+
+  const bar = document.getElementById('slotBar');
+  bar.innerHTML = Array.from({ length: MAX_SLOTS }, () => '<div class="slot"></div>').join('');
+  computeTileSize();
+  generateTiles();
+  renderBoard();
 }
 
 init();
