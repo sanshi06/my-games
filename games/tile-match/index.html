@@ -228,6 +228,27 @@ function getLayers() {
   }));
 }
 
+
+  // ============================================================
+  //  音效引擎 (Web Audio API — 柔和铃铛风)
+  // ============================================================
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  let audioCtx = null;
+  function ensureAudio() { if (!audioCtx) audioCtx = new AudioCtx(); }
+  function playTone(freq, dur, type, vol, delay) {
+    ensureAudio(); const t = (audioCtx.currentTime + (delay || 0));
+    const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+    o.type = type || "sine"; o.frequency.setValueAtTime(freq, t);
+    g.gain.setValueAtTime(vol || 0.16, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    o.connect(g); g.connect(audioCtx.destination); o.start(t); o.stop(t + dur);
+  }
+  function sfxSelect()   { playTone(523,0.06,"sine",0.14); setTimeout(function(){playTone(659,0.05,"sine",0.11);},40); }
+  function sfxMatch()    { playTone(523,0.08,"triangle",0.15,0); playTone(659,0.08,"triangle",0.15,0.06); playTone(784,0.10,"triangle",0.15,0.12); }
+  function sfxVictory()  { [523,587,659,784,1047].forEach(function(f,i){playTone(f,0.12,"triangle",0.16,i*0.1);}); }
+  function sfxGameOver() { playTone(330,0.14,"triangle",0.14,0); playTone(262,0.14,"triangle",0.14,0.15); playTone(220,0.18,"triangle",0.14,0.28); }
+  function sfxUndo()     { playTone(659,0.05,"sine",0.11); setTimeout(function(){playTone(523,0.06,"sine",0.11);},30); }
+  function sfxHint()     { playTone(1175,0.06,"sine",0.09); }
 // ============================================================
 //  游戏状态
 // ============================================================
@@ -450,6 +471,7 @@ function updateHUD() {
 //  交互逻辑
 // ============================================================
 function onTileClick(tile) {
+  sfxSelect();
   if (tile.blocked || !tile.alive) return;
   if (slots.length >= MAX_SLOTS) return;
 
@@ -491,6 +513,7 @@ function checkMatch() {
   // 找到可以消除的图标
   for (const [icon, count] of Object.entries(iconCount)) {
     if (count >= MATCH_COUNT) {
+      sfxMatch();
       // 消除
       let removed = 0;
       slots = slots.filter(tid => {
@@ -557,6 +580,7 @@ function spawnParticles(icon) {
 //  撤销
 // ============================================================
 function undo() {
+  sfxUndo();
   if (history.length === 0) return;
   clearHint();
   const last = history.pop();
@@ -573,6 +597,7 @@ function undo() {
 //  提示
 // ============================================================
 function showHint() {
+  sfxHint();
   clearHint();
   // 找一对可点击的相同图标牌
   const clickable = tiles.filter(t => t.alive && !t.blocked);
@@ -652,12 +677,14 @@ function showOverlay(emoji, title, msg, btnText, btnAction) {
 }
 
 function showVictory() {
+  sfxVictory();
   showOverlay('🏆', '恭喜通关！',
     `消除了 ${clearedCount} 张牌，得分 ${score}`,
     '再来一局', restart);
 }
 
 function showGameOver() {
+  sfxGameOver();
   const alive = tiles.filter(t => t.alive).length;
   showOverlay('😵', '槽位已满！',
     `还剩 ${alive} 张牌未消除，得分 ${score}`,
