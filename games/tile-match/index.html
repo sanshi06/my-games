@@ -197,6 +197,7 @@
 <div class="btn-row">
   <button class="btn btn-undo" id="btnUndo">↩ 撤销</button>
   <button class="btn btn-hint" id="btnHint">💡 提示</button>
+  <button class="btn btn-music" id="btnBGM" style="background:#8b5cf6">🎵 BGM</button>
   <button class="btn btn-restart" id="btnRestart">🔄 重新开始</button>
 </div>
 
@@ -249,6 +250,36 @@ function getLayers() {
   function sfxGameOver() { playTone(330,0.14,"triangle",0.14,0); playTone(262,0.14,"triangle",0.14,0.15); playTone(220,0.18,"triangle",0.14,0.28); }
   function sfxUndo()     { playTone(659,0.05,"sine",0.11); setTimeout(function(){playTone(523,0.06,"sine",0.11);},30); }
   function sfxHint()     { playTone(1175,0.06,"sine",0.09); }
+  // ---- 背景音乐 (柔和五声音阶循环) ----
+  const BGM = {
+    _timer: null,
+    _playing: false,
+    _notes: [262, 294, 330, 392, 440, 523],
+    _pattern: [0,2,3,5, 0,2,3,5, 1,3,4,5, 0,2,4,3],
+    _idx: 0,
+
+    start() {
+      if (this._playing) return;
+      this._playing = true; this._idx = 0; this._next();
+    },
+    _next() {
+      if (!this._playing) return;
+      const n = this._notes[this._pattern[this._idx % this._pattern.length]];
+      playTone(n, 1.2, 'sine', 0.04);
+      if (Math.random() < 0.4) playTone(n * 2, 0.8, 'sine', 0.015, 0.1);
+      this._idx++;
+      this._timer = setTimeout(() => this._next(), 800);
+    },
+    stop() {
+      this._playing = false;
+      if (this._timer) clearTimeout(this._timer);
+    },
+    toggle() {
+      this._playing ? this.stop() : this.start();
+      return this._playing;
+    },
+  };
+
 // ============================================================
 //  游戏状态
 // ============================================================
@@ -472,6 +503,7 @@ function updateHUD() {
 // ============================================================
 function onTileClick(tile) {
   sfxSelect();
+  if (!BGM._playing) { BGM.start(); const b=document.getElementById("btnBGM"); if(b){b.style.background="#10b981";b.textContent="🎵 ON";} }
   if (tile.blocked || !tile.alive) return;
   if (slots.length >= MAX_SLOTS) return;
 
@@ -705,6 +737,11 @@ function restart() {
 document.getElementById('btnRestart').addEventListener('click', restart);
 document.getElementById('btnUndo').addEventListener('click', undo);
 document.getElementById('btnHint').addEventListener('click', showHint);
+document.getElementById('btnBGM').addEventListener('click', function() {
+  const on = BGM.toggle();
+  this.style.background = on ? '#10b981' : '#8b5cf6';
+  this.textContent = on ? '🎵 ON' : '🎵 BGM';
+});
 
 // 键盘快捷键
 document.addEventListener('keydown', e => {
