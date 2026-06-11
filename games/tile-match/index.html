@@ -235,7 +235,14 @@ function getLayers() {
   // ============================================================
   const AudioCtx = window.AudioContext || window.webkitAudioContext;
   let audioCtx = null;
-  function ensureAudio() { if (!audioCtx) audioCtx = new AudioCtx(); }
+  function ensureAudio() {
+    if (!audioCtx) audioCtx = new AudioCtx();
+    // 移动端 AudioContext 初始为 suspended，必须在用户交互后 resume
+    if (audioCtx.state === "suspended") audioCtx.resume();
+  }
+  // 首次触摸/点击时解锁音频
+  document.addEventListener("touchstart", function(){ ensureAudio(); }, {once:true});
+  document.addEventListener("click",       function(){ ensureAudio(); }, {once:true});
   function playTone(freq, dur, type, vol, delay) {
     ensureAudio(); const t = (audioCtx.currentTime + (delay || 0));
     const o = audioCtx.createOscillator(), g = audioCtx.createGain();
