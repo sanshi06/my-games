@@ -169,6 +169,37 @@
   .modal p { color:#aaa; margin-bottom:18px; line-height:1.6; }
   .modal .btn { font-size:1rem; padding:12px 36px; }
 
+
+  /* 开始界面 */
+  #startScreen {
+    position:fixed; inset:0; z-index:500;
+    background:linear-gradient(135deg, #0f0c29, #1a1a2e, #16213e);
+    display:flex; flex-direction:column; align-items:center;
+    justify-content:center; gap:24px;
+  }
+  #startScreen .logo { font-size:5rem; animation: floatUp 2.5s ease-in-out infinite; }
+  @keyframes floatUp {
+    0%,100% { transform:translateY(0); }
+    50% { transform:translateY(-12px); }
+  }
+  #startScreen h1 {
+    font-size:2.2rem; font-weight:800; color:#fff; letter-spacing:0.06em;
+  }
+  #startScreen h1 span { background:linear-gradient(135deg,#22d3ee,#a855f7); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+  #startScreen .subtitle { color:#94a3b8; font-size:0.95rem; }
+  #startScreen .startBtn {
+    margin-top:8px; padding:16px 60px; border-radius:40px;
+    border:none; background:linear-gradient(135deg, #e94560, #a855f7);
+    color:#fff; font-size:1.2rem; font-weight:700; cursor:pointer;
+    letter-spacing:0.06em; box-shadow:0 8px 32px rgba(233,68,96,0.3);
+    animation: pulseBtn 2s ease-in-out infinite; transition:transform 0.15s;
+  }
+  #startScreen .startBtn:active { transform:scale(0.95); }
+  @keyframes pulseBtn {
+    0%,100% { box-shadow:0 8px 32px rgba(233,68,96,0.3); }
+    50% { box-shadow:0 12px 42px rgba(233,68,96,0.55); }
+  }
+
   /* 响应式：留出空间让 JS 动态计算 */
   @media (max-width:480px) {
     .header .title { font-size:1.2rem; }
@@ -176,6 +207,13 @@
 </style>
 </head>
 <body>
+<div id="startScreen">
+  <div class="logo">🎴</div>
+  <h1>叠叠<span>消</span></h1>
+  <p class="subtitle">三层消除小游戏 · 找到三张相同的牌</p>
+  <button class="startBtn" id="startBtn">开始游戏</button>
+</div>
+
 
 <div class="header">
   <div class="title">🎴 叠叠<span>消</span></div>
@@ -510,7 +548,6 @@ function updateHUD() {
 // ============================================================
 function onTileClick(tile) {
   sfxSelect();
-  if (!BGM._playing) { BGM.start(); const b=document.getElementById("btnBGM"); if(b){b.style.background="#10b981";b.textContent="🎵 ON";} }
   if (tile.blocked || !tile.alive) return;
   if (slots.length >= MAX_SLOTS) return;
 
@@ -782,6 +819,21 @@ function init() {
   computeTileSize();
   generateTiles();
   renderBoard();
+
+  // 开始按钮 — 解锁音频 + 进入游戏
+  document.getElementById('startBtn').addEventListener('click', function() {
+    ensureAudio();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    BGM.start();
+    var b = document.getElementById('btnBGM');
+    if (b) { b.style.background = '#10b981'; b.textContent = '🎵 ON'; }
+    // 隐藏开始界面
+    var screen = document.getElementById('startScreen');
+    screen.style.transition = 'opacity 0.4s, transform 0.4s';
+    screen.style.opacity = '0';
+    screen.style.transform = 'scale(1.05)';
+    setTimeout(function() { screen.remove(); }, 400);
+  });
 }
 
 init();
